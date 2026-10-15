@@ -1,17 +1,17 @@
 # Orca runtime backend
 
-Orca is an experimental macOS backend in which the Orca app owns both the task worktree and terminal endpoint.
+Orca is an experimental backend in which the Orca runtime owns both worker worktrees and terminal endpoints.
 The crewmate harness remains the agent process launched inside that endpoint.
 Firstmate agents load [`firstmate-orca`](../.agents/skills/firstmate-orca/SKILL.md) before operating or recovering this backend.
 
 ## Setup
 
 Pick Orca when you already use the Orca macOS app and want Orca-managed worktrees and terminals instead of Treehouse plus a session multiplexer.
-Orca is macOS-only, explicit-only, and does not support secondmate spawns.
+Orca is explicit-only and supports local secondmates in separately seeded homes.
 
 Prerequisites:
 
-- `/Applications/Orca.app` installed, running, and ready.
+- A running, ready Orca runtime, either the macOS app or `orca serve`.
 - The `orca` CLI, installed with `brew install orca`.
 - The universal harness and toolchain requirements in [`configuration.md`](configuration.md#toolchain).
 
@@ -22,7 +22,8 @@ Before any spawn mutates repository state, Firstmate requires `orca status --jso
 The first task for a project registers that repository with `orca repo add --path` when needed.
 No manual repository registration is required.
 
-Open the Orca app to watch a task's terminal.
+Open the Orca app and select the runtime's environment to watch a task's terminal.
+An Orca client on another machine views the same local Firstmate homes; this does not use Firstmate's SSH remote-secondmate transport.
 Routine supervision uses the recorded endpoint through `bin/fm-peek.sh <id>` and `FM_HOME=<home> bin/fm-send.sh <id> '<text>'`.
 Enter and Ctrl-C are supported; Escape is not.
 
@@ -31,7 +32,7 @@ When scoped worker credentials live in a tmux session, configure the [Orca envir
 
 ## Task shape and metadata
 
-Each task has one Orca-managed git worktree and one Orca terminal.
+Each ship or scout has one Orca-managed git worktree and one Orca terminal.
 `fm-spawn.sh` does not call Treehouse for Orca tasks.
 The normal isolation and unlanded-work refusal rules still apply.
 
@@ -46,6 +47,26 @@ worktree=<absolute Orca worktree path>
 `window=` remains the caller-facing Firstmate alias.
 `terminal=` and `orca_worktree_id=` are the backend authority used by operation and cleanup paths.
 Orca returns `orca_worktree_id=` as that composite of the Orca repo id and the worktree path, and cleanup validation requires both halves rather than treating the value as a simple name.
+
+## Local secondmates
+
+Seed a secondmate with the normal provisioning helper and an explicit home path outside the primary home and code root, then select Orca when launching it.
+The seeded Git checkout becomes a registered Orca repository, with a terminal titled `2ndmate-<id>` in its root workspace.
+The secondmate keeps its own charter, configuration, backlog, project clones, and supervision session.
+Its workers use those project clones and explicitly parent their Orca workspaces under its validated home workspace.
+Primary-home workers continue to have no parent workspace.
+
+The adapter records registration ownership in the secondmate's private state.
+Retirement closes and confirms the exact terminal before deleting the home, verifies registrations contain no remaining workers or terminals, and removes only registrations it created.
+It never invokes worktree removal on the persistent home.
+Pre-existing registrations are preserved.
+Incomplete inventories, failed closes, uncertain registration results, and identity mismatches retain the home and records for reconciliation.
+Existing secondmate metadata or an unfinished launch receipt refuses a second launch.
+The shared child-work, pending-reply, and home-removal guards still apply.
+
+Agent-process recovery remains unverified for Orca, including Pi secondmates.
+An idle task, a completed turn, a connected terminal, or a stale terminal handle does not establish that an agent has stopped.
+The control plane continues to refuse exit and relaunch; guarded retirement is a separate explicit lifecycle operation.
 
 ## Current lifecycle and safety
 
@@ -73,8 +94,8 @@ Reinstall the CLI and rerun; [`verification/runtime-backends.md`](verification/r
 ## Active limits
 
 - Orca is macOS-only and explicit-only.
-- The app must be running and report ready.
-- Secondmate spawns are unsupported.
+- The selected runtime must report ready.
+- Local secondmates are supported; Firstmate's SSH remote-secondmate route remains Herdr-only.
 - Escape is unsupported.
 - Orca exposes no stable CLI version or protocol marker, so readiness is the compatibility gate rather than a version floor.
 - Only the verified terminal-handle and worktree result fields are accepted; speculative response shapes are rejected.

@@ -301,7 +301,7 @@ Both recorded runtime identities now classify the exact `pi-launcher` foreground
 Backend applicability was reviewed across every spawn adapter.
 Tmux needs the exact `pi-launcher`, `pi-signed`, `pi`, and `Pi` process identities for recovery-grade liveness.
 Herdr uses native registered-agent state and needs no process-name branch.
-Zellij has no verified recovery-grade agent process probe, while Orca and cmux do not support secondmate spawns, so those three retain their existing generic ordinary-launch semantics without a new liveness matcher.
+Zellij and Orca have no verified recovery-grade agent process probe, while cmux does not support secondmate spawns; none gains a liveness matcher from the process-name checks above.
 
 The current classifier matrix and its refresh guard are recorded in [Composer classification matrix](#composer-classification-matrix), with portable shape coverage in `tests/fm-composer-lib.test.sh` and `tests/fm-composer-ghost.test.sh`.
 Kimi pointer delivery and OpenCode 1.18.4 busy-queue behavior remain pinned by `tests/fm-kimi-harness.test.sh`, `tests/fm-tmux-submit-busy.test.sh`, and `tests/fm-composer-lib.test.sh`.
@@ -2027,6 +2027,40 @@ tests/fm-bootstrap.test.sh
 ```
 
 The fake-Orca suite covers readiness, registration, create response parsing, metadata routing, popup-safe submit, and path-matched release refusal.
+
+### Local secondmate identity surface
+
+Read-only inspection on 2026-10-16 (Sydney) used Orca runtime 1.4.224 and Pi 1.2.0.
+
+```sh
+orca status --json
+orca worktree show --worktree path:<isolated-test-worktree> --json
+orca terminal list --worktree path:<isolated-test-worktree> --limit 10000 --json
+orca orchestration worker-start --help
+pi --version
+```
+
+Observed fields:
+
+```text
+result.runtime.appVersion=1.4.224
+result.runtime.reachable=true
+result.runtime.state=ready
+result.worktree.id=<repo-id>::<absolute-path>
+result.worktree.repoId=<repo-id>
+result.worktree.projectHostSetupId=<setup-id>
+result.terminals[].handle=<terminal-handle>
+result.terminals[].worktreeId=<repo-id>::<absolute-path>
+result.hostScope.omittedHostIds=[]
+result.totalCount=2
+result.truncated=false
+pi --version: 1.2.0
+```
+
+These reads establish workspace and terminal inventory shapes, not a Pi process-liveness proof.
+No native supervised Pi start/stop identity has been established, so `fm_backend_agent_state` stays `unverified` and exit/relaunch remains refused.
+`tests/fm-orca-secondmate-live-e2e.test.sh` owns the opted-in launch, child-placement verification, visual checkpoint, and guarded-retirement refresh procedure.
+Its phases retain live resources between inspections and require explicit disposable paths.
 
 ### Orca environment source
 
