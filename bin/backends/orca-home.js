@@ -104,6 +104,29 @@ try {
       value = matches[0].id;
       break;
     }
+    case 'worker-label': {
+      homeDir(home);
+      const id = fs.readFileSync(path.join(home, '.fm-secondmate-home'), 'utf8').trim();
+      if (!/^[A-Za-z0-9_-]+$/.test(id) || !project || /[\r\n\t]/.test(project))
+        refuse('invalid secondmate worker label');
+      value = `2ndmate-${id} · ${project}`;
+      break;
+    }
+    case 'worker-workspace': {
+      const [workspace, label] = args;
+      const w = result(input()).worktree;
+      if (!w || w.id !== workspace || w.displayName !== label ||
+          w.parentWorktreeId !== null || w.lineage !== null)
+        refuse('Orca worker label or independent placement was not confirmed');
+      break;
+    }
+    case 'worker-terminal': {
+      const [workspace, terminal, label] = args;
+      const t = result(input()).terminal;
+      if (!t || t.handle !== terminal || t.worktreeId !== workspace || t.title !== label)
+        refuse('Orca worker terminal label was not confirmed');
+      break;
+    }
     case 'workspace': {
       const r = receipt(home, project);
       if (!r || !['ready', 'releasing'].includes(r.state)) refuse('missing persistent Orca workspace receipt');

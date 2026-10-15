@@ -53,8 +53,11 @@ Orca returns `orca_worktree_id=` as that composite of the Orca repo id and the w
 Seed a secondmate with the normal provisioning helper and an explicit home path outside the primary home and code root, then select Orca when launching it.
 The seeded Git checkout becomes a registered Orca repository, with a terminal titled `2ndmate-<id>` in its root workspace.
 The secondmate keeps its own charter, configuration, backlog, project clones, and supervision session.
-Its workers use those project clones and explicitly parent their Orca workspaces under its validated home workspace.
-Primary-home workers continue to have no parent workspace.
+Its workers stay independent under their own project repositories, with `2ndmate-<id> · fm-<task-id>` on both their worktree display name and custom terminal title.
+Grouping is by label only.
+Orca 1.4.224 refuses cross-repository lineage with `LINEAGE_PARENT_CONTEXT_CONFLICT`: "Parent worktree must belong to the same repository, execution host, and project."
+Spawn verifies the labels and absence of a parent before launching the worker.
+Primary-home workers retain their existing names and independent placement.
 
 The adapter records registration ownership in the secondmate's private state.
 Retirement closes and confirms the exact terminal before deleting the home, verifies registrations contain no remaining workers or terminals, and removes only registrations it created.

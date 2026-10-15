@@ -9,7 +9,7 @@
 #   FM_ORCA_PROOF_PROJECT=<clone name> (default proof)
 #   FM_ORCA_PROOF_TASK=<read-only scout request> (launch only)
 # Launch refuses existing paths, seeds from this committed code root, and leaves
-# the sessions open. Verify checks the child's real parent placement and report.
+# the sessions open. Verify checks the child's visible labels, independent placement, and report.
 # Retire requires FM_ORCA_PROOF_VISUAL_CONFIRMED=1 after human inspection and the
 # secondmate's guarded child cleanup. No trap deletes unverified live resources.
 set -eu
@@ -59,17 +59,18 @@ case "${FM_ORCA_PROOF_PHASE:-launch}" in
     [ "$(cat "$mate/.fm-secondmate-home")" = "$id" ] || fail 'secondmate identity mismatch'
     . "$ROOT/bin/fm-backend.sh"
     fm_backend_validate_task_endpoint "$primary/state/$id.meta" "$id" || fail 'invalid secondmate endpoint'
-    workspace=$(fm_backend_meta_exact_value "$primary/state/$id.meta" orca_worktree_id)
     if [ "$FM_ORCA_PROOF_PHASE" = verify ]; then
       child="$mate/state/orca-proof-scout.meta"
       fm_backend_validate_task_endpoint "$child" orca-proof-scout || fail 'invalid proof scout endpoint'
       [ -s "$mate/data/orca-proof-scout/report.md" ] || fail 'proof scout report missing'
       child_workspace=$(fm_backend_meta_exact_value "$child" orca_worktree_id)
-      orca worktree show --worktree "id:$child_workspace" --json | node -e '
-const d=JSON.parse(require("fs").readFileSync(0,"utf8"));
-if(d.ok!==true || d.result?.worktree?.parentWorktreeId!==process.argv[1]) process.exit(1);
-' "$workspace" || fail 'real child workspace is not parented under the secondmate'
-      pass 'real scout report exists and Orca confirms the child parent relationship; inspect both terminals before retirement'
+      child_terminal=$(fm_backend_meta_exact_value "$child" terminal)
+      label="2ndmate-$id · fm-orca-proof-scout"
+      orca worktree show --worktree "id:$child_workspace" --json | \
+        node "$ROOT/bin/backends/orca-home.js" worker-workspace "$child_workspace" "$label" || fail 'real worker label or independent placement is unconfirmed'
+      orca terminal show --terminal "$child_terminal" --json | \
+        node "$ROOT/bin/backends/orca-home.js" worker-terminal "$child_workspace" "$child_terminal" "$label" || fail 'real worker terminal label is unconfirmed'
+      pass 'real scout report exists and Orca confirms both worker labels with no parent; inspect both terminals before retirement'
     else
       [ "${FM_ORCA_PROOF_VISUAL_CONFIRMED:-0}" = 1 ] || fail 'visual confirmation required before retirement'
       bash "$ROOT/bin/fm-teardown.sh" "$id"

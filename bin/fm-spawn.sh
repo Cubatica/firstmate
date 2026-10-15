@@ -4,6 +4,8 @@
 # Orca secondmates reuse the seeded home's registered root workspace. Their
 # state/orca-secondmate-launch receipt blocks duplicate or uncertain launches;
 # registration receipts remain in that home until guarded retirement.
+# Workers from an Orca secondmate stay independent in their project repository;
+# their worktree display name and terminal title carry 2ndmate-<id> ownership.
 # Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] --secondmate
@@ -4285,13 +4287,15 @@ EOF
       }
       T=$ORCA_TERMINAL
     else
-      ORCA_PARENT_HOME=
+      ORCA_SECONDMATE_HOME=
+      ORCA_WORKER_LABEL=$W
       if [ -f "$FM_HOME/.fm-secondmate-home" ] &&
         { [ -e "$FM_HOME/state/orca-secondmate-launch" ] || [ -L "$FM_HOME/state/orca-secondmate-launch" ]; }; then
-        ORCA_PARENT_HOME=$(cd "$FM_HOME" && pwd -P)
+        ORCA_SECONDMATE_HOME=$(cd "$FM_HOME" && pwd -P)
+        ORCA_WORKER_LABEL=$(fm_backend_orca_worker_label "$ORCA_SECONDMATE_HOME" "$W") || exit 1
       fi
       set +e
-      ORCA_WT_RAW=$(fm_backend_orca_worktree_create "$PROJ_ABS" "$W" "$ORCA_PARENT_HOME")
+      ORCA_WT_RAW=$(fm_backend_orca_worktree_create "$PROJ_ABS" "$W" "$ORCA_SECONDMATE_HOME")
       ORCA_WT_STATUS=$?
       set -e
       if [ "$ORCA_WT_STATUS" -ne 0 ]; then
@@ -4310,9 +4314,12 @@ EOF
       fi
       validate_spawn_worktree "orca worktree create" "$W"
       if [ -z "$ORCA_TERMINAL" ]; then
-        ORCA_TERMINAL=$(fm_backend_orca_terminal_create "$ORCA_WORKTREE_ID" "$W") || exit 1
+        ORCA_TERMINAL=$(fm_backend_orca_terminal_create "$ORCA_WORKTREE_ID" "$ORCA_WORKER_LABEL") || exit 1
       fi
       T="$ORCA_TERMINAL"
+      if [ -n "$ORCA_SECONDMATE_HOME" ]; then
+        fm_backend_orca_label_worker "$ORCA_WORKTREE_ID" "$ORCA_TERMINAL" "$ORCA_WORKER_LABEL" || exit 1
+      fi
     fi
     ;;
   esac

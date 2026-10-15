@@ -90,7 +90,7 @@ Keep Orca smoke tests focused on lifecycle plumbing:
 5. Tear down through `bin/fm-teardown.sh` after the task is safely disposable or landed.
 6. Restore the previous backend selection if Orca was selected only for the smoke test.
 
-For a secondmate smoke, also verify its own terminal, one child's explicit parent placement, correlated replies, and guarded child-first retirement.
+For a secondmate smoke, also verify its own terminal, one worker's ownership labels and independent placement, correlated replies, and guarded child-first retirement.
 Keep the home and registration receipts when cleanup cannot confirm closure.
 
 Do not mix a backend smoke test with unrelated feature work.

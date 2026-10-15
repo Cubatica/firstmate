@@ -1575,9 +1575,9 @@ test_home_retirement_ownership_and_retry() {
   pass 'Orca retirement removes only owned empty registrations and retries idempotently'
 }
 
-test_home_worker_parent_is_explicit() {
+test_home_worker_stays_independent() {
   local out project
-  make_registered_home worker-parent owned
+  make_registered_home worker-independent owned
   project="$TEST_HOME/projects/sample"
   mkdir -p "$project"
   home_root_response "$TEST_HOME" "$RESP/1.out"
@@ -1586,13 +1586,77 @@ test_home_worker_parent_is_explicit() {
   printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","path":"%s","repoId":"repo-child","isMainWorktree":true}}}\n' "$project" "$project" > "$RESP/4.out"
   home_setup_response "$project" repo-child
   printf '{"ok":true,"result":{"worktree":{"id":"repo-child::/worker","path":"/worker"}}}\n' > "$RESP/5.out"
-  out=$(run_orca_home fm_backend_orca_worktree_create "$project" child "$TEST_HOME") || fail 'parented worker failed'
+  out=$(run_orca_home fm_backend_orca_worktree_create "$project" child "$TEST_HOME") || fail 'independent worker failed'
   [ "$out" = $'repo-child::/worker\t/worker' ] || fail 'worker result changed'
-  assert_contains "$(cat "$LOG")" $'--parent-worktree\x1fid:repo-home::'"$TEST_HOME" 'missing explicit parent'
-  assert_not_contains "$(cat "$LOG")" --no-parent 'secondmate child lost its parent'
-  pass 'secondmate workers use the validated home as their explicit Orca parent'
+  assert_contains "$(cat "$LOG")" --no-parent 'secondmate worker must be independent'
+  assert_not_contains "$(cat "$LOG")" --parent-worktree 'secondmate worker must not claim cross-repository lineage'
+  pass 'secondmate workers stay independent in their registered project repository'
 }
 
+
+test_spawn_secondmate_worker_labels() {
+  local project wt id out label staged
+  id=orcalabelworkerz1
+  make_registered_home worker-label-spawn owned
+  project="$TEST_HOME/projects/sample"
+  wt="$CASE_DIR/worker"
+  fm_git_worktree "$project" "$wt" "fm/$id"
+  mkdir -p "$TEST_HOME/data/$id" "$TEST_HOME/config"
+  printf 'manual\n' > "$TEST_HOME/config/backlog-backend"
+  printf 'worktree=repo-home::%s\nterminal=term-home\n' "$TEST_HOME" > "$TEST_HOME/state/orca-secondmate-launch"
+  write_spawn_brief "$TEST_HOME/data" "$id"
+  touch "$TEST_HOME/state/.last-watcher-beat"
+  label="2ndmate-home-test · fm-$id"
+  home_root_response "$TEST_HOME" "$RESP/1.out"
+  printf '{"ok":false,"error":{"code":"repo_not_found"}}\n' > "$RESP/2.out"
+  printf '{"ok":true,"result":{"repo":{"id":"repo-child"}}}\n' > "$RESP/3.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","path":"%s","repoId":"repo-child","isMainWorktree":true}}}\n' "$project" "$project" > "$RESP/4.out"
+  home_setup_response "$project" repo-child
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","path":"%s"},"terminal":{"handle":"term-child"}}}\n' "$wt" "$wt" > "$RESP/5.out"
+  printf '{"ok":true}\n' > "$RESP/6.out"
+  cp "$RESP/6.out" "$RESP/7.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","displayName":"%s","parentWorktreeId":null,"lineage":null}}}\n' "$wt" "$label" > "$RESP/8.out"
+  printf '{"ok":true,"result":{"terminal":{"handle":"term-child","worktreeId":"repo-child::%s","title":"%s"}}}\n' "$wt" "$label" > "$RESP/9.out"
+  out=$( HOME="$SPAWN_HOME" CLAUDE_CONFIG_DIR='' PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$TEST_HOME" FM_SPAWN_NO_GUARD=1 \
+    "$ROOT/bin/fm-spawn.sh" "$id" "$project" claude --scout --backend orca 2>&1 )
+  expect_code 0 $? "labelled secondmate worker spawn failed: $out"
+  assert_grep 'terminal=term-child' "$TEST_HOME/state/$id.meta" 'labelled worker metadata lost its terminal'
+  assert_contains "$(cat "$LOG")" $'--display-name\x1f'"$label" 'worker worktree label missing'
+  assert_contains "$(cat "$LOG")" $'terminal\x1frename\x1f--terminal\x1fterm-child\x1f--title\x1f'"$label" 'worker custom terminal label missing'
+  assert_contains "$(cat "$LOG")" --no-parent 'worker did not request independent placement'
+  assert_not_contains "$(cat "$LOG")" --parent-worktree 'worker claimed a parent relationship'
+  staged=$(tr '\037' '\n' < "$LOG" | sed -n "s/^\. '\([^']*\)'$/\1/p" | tail -1)
+  rm -rf "/tmp/fm-$id"
+  [ -z "$staged" ] || rm -rf "$(dirname "$staged")"
+  pass 'fm-spawn labels both secondmate worker surfaces and confirms no false parent'
+}
+
+test_worker_label_postconditions_fail_closed() {
+  local bad
+  for bad in parent lineage missing-parent worktree-label terminal-label terminal-binding; do
+    orca_case "worker-label-$bad"
+    python3 - "$RESP" "$bad" <<'PYLABEL'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); bad=sys.argv[2]
+w={'id':'repo-child::/worker','displayName':'2ndmate-proof · fm-test','parentWorktreeId':None,'lineage':None}
+t={'handle':'term-child','worktreeId':w['id'],'title':w['displayName']}
+if bad=='parent': w['parentWorktreeId']='repo-other::/home'
+elif bad=='lineage': w['lineage']={'parentWorktreeId':'repo-other::/home'}
+elif bad=='missing-parent': del w['parentWorktreeId']
+elif bad=='worktree-label': w['displayName']='wrong'
+elif bad=='terminal-label': t['title']='wrong'
+elif bad=='terminal-binding': t['worktreeId']='repo-other::/worker'
+for n,d in enumerate([{'ok':True},{'ok':True},{'ok':True,'result':{'worktree':w}},{'ok':True,'result':{'terminal':t}}],1):
+ (p/f'{n}.out').write_text(json.dumps(d))
+PYLABEL
+    if run_orca_home fm_backend_orca_label_worker 'repo-child::/worker' term-child '2ndmate-proof · fm-test' >/dev/null 2>&1; then
+      fail "accepted unconfirmed worker placement or label: $bad"
+    fi
+  done
+  pass 'Orca worker labels refuse false or missing parent postconditions and mismatched visible identities'
+}
 
 
 test_partial_home_terminal_create_retains_identity() {
@@ -1667,6 +1731,8 @@ test_home_registration_uncertainty_and_binding
 test_home_setup_identity_refuses_mismatch
 test_home_close_requires_complete_scoped_inventory
 test_home_retirement_ownership_and_retry
-test_home_worker_parent_is_explicit
+test_home_worker_stays_independent
+test_spawn_secondmate_worker_labels
+test_worker_label_postconditions_fail_closed
 
 test_partial_home_terminal_create_retains_identity

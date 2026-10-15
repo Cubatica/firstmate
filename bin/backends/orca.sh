@@ -281,16 +281,14 @@ fm_backend_orca_repo_ensure() {  # <project-path>
 }
 
 fm_backend_orca_worktree_create() {  # <project-path> <name> [secondmate-home]
-  local project=$1 name=$2 home=${3:-} repo_id out wt_id wt_path terminal parent
-  local parent_args=(--no-parent)
+  local project=$1 name=$2 home=${3:-} repo_id out wt_id wt_path terminal
   if [ -n "$home" ]; then
-    parent=$(fm_backend_orca_home_workspace "$home" read) || return 1
+    fm_backend_orca_home_workspace "$home" read >/dev/null || return 1
     repo_id=$(fm_backend_orca_home_repo "$home" "$project") || return 1
-    parent_args=(--parent-worktree "id:$parent")
   else
     repo_id=$(fm_backend_orca_repo_ensure "$project") || return 1
   fi
-  out=$(orca worktree create --repo "id:$repo_id" --name "$name" "${parent_args[@]}" --setup skip --json) || return 1
+  out=$(orca worktree create --repo "id:$repo_id" --name "$name" --no-parent --setup skip --json) || return 1
   wt_id=$(printf '%s' "$out" | fm_backend_orca_json_get worktree-id) || {
     echo "error: orca worktree create did not return a worktree id for $name" >&2
     return 1
@@ -311,6 +309,22 @@ fm_backend_orca_worktree_create() {  # <project-path> <name> [secondmate-home]
   }
   printf '%s\t%s' "$wt_id" "$wt_path"
   [ -z "$terminal" ] || printf '\t%s' "$terminal"
+}
+
+# Labels express secondmate ownership across repositories; Orca lineage does
+# not. Apply only after the caller owns the allocated endpoint for cleanup.
+fm_backend_orca_worker_label() { # <secondmate-home> <task-window-name>
+  node "$FM_ORCA_HOME_JSON" worker-label "$1" "$2"
+}
+
+fm_backend_orca_label_worker() { # <worktree-id> <terminal> <label>
+  local workspace=$1 terminal=$2 label=$3 out
+  fm_backend_orca_run_json orca worktree set --worktree "id:$workspace" --display-name "$label" --json || return 1
+  fm_backend_orca_run_json orca terminal rename --terminal "$terminal" --title "$label" --json || return 1
+  out=$(orca worktree show --worktree "id:$workspace" --json) || return 1
+  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" worker-workspace "$workspace" "$label" || return 1
+  out=$(orca terminal show --terminal "$terminal" --json) || return 1
+  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" worker-terminal "$workspace" "$terminal" "$label"
 }
 
 fm_backend_orca_terminal_create() {  # <worktree-id> <title> [attempt-receipt]

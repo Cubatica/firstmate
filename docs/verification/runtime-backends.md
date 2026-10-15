@@ -2065,8 +2065,18 @@ pi --version: 1.2.0
 The worktree response does not contain `projectHostSetupId`; the adapter resolves the matching path and repository from the separate local setup inventory.
 These reads establish workspace and terminal inventory shapes, not a Pi process-liveness proof.
 No native supervised Pi start/stop identity has been established, so `fm_backend_agent_state` stays `unverified` and exit/relaunch remains refused.
-`tests/fm-orca-secondmate-live-e2e.test.sh` owns the opted-in launch, child-placement verification, visual checkpoint, and guarded-retirement refresh procedure.
+`tests/fm-orca-secondmate-live-e2e.test.sh` owns the opted-in launch, worker-label and no-parent verification, visual checkpoint, and guarded-retirement refresh procedure.
 Its phases retain live resources between inspections and require explicit disposable paths.
+
+On the same runtime, a worker in another repository retained `parentWorktreeId=null` after creation with an explicit parent request.
+An explicit `orca worktree set --worktree id:<worker-workspace> --parent-worktree identity:<home-identity> --json` returned:
+
+```json
+{"ok":false,"error":{"code":"LINEAGE_PARENT_CONTEXT_CONFLICT","message":"Parent worktree must belong to the same repository, execution host, and project."}}
+```
+
+The adapter therefore uses independent placement and ownership labels only.
+`tests/fm-backend-orca.test.sh` verifies the worktree and terminal labels and refuses a false or missing no-parent postcondition.
 
 ### Orca environment source
 
