@@ -51,7 +51,7 @@ Orca returns `orca_worktree_id=` as that composite of the Orca repo id and the w
 ## Local secondmates
 
 Seed a secondmate with the normal provisioning helper and an explicit home path outside the primary home and code root, then select Orca when launching it.
-The seeded Git checkout becomes a registered Orca repository, with a terminal titled `2ndmate-<id>` in its root workspace.
+The seeded Git checkout becomes a registered Orca repository, with a terminal initially titled `2ndmate-<id>` in its root workspace; the harness may replace that automatic title.
 The secondmate keeps its own charter, configuration, backlog, project clones, and supervision session.
 Its workers stay independent under their own project repositories, with `2ndmate-<id> · fm-<task-id>` on both their worktree display name and custom terminal title.
 Grouping is by label only.
@@ -96,7 +96,7 @@ Reinstall the CLI and rerun; [`verification/runtime-backends.md`](verification/r
 
 ## Active limits
 
-- Orca is macOS-only and explicit-only.
+- Runtime selection is explicit; live verification currently covers macOS.
 - The selected runtime must report ready.
 - Local secondmates are supported; Firstmate's SSH remote-secondmate route remains Herdr-only.
 - Escape is unsupported.
