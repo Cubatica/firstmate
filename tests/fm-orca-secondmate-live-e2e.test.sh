@@ -7,6 +7,7 @@
 #   FM_ORCA_PROOF_ID=<secondmate id>
 #   FM_ORCA_PROOF_REPO=<HTTPS clone URL> (launch only)
 #   FM_ORCA_PROOF_PROJECT=<clone name> (default proof)
+#   FM_ORCA_PROOF_SCOUT_ID=<unique scout id> (default orca-proof-scout)
 #   FM_ORCA_PROOF_TASK=<read-only scout request> (launch only)
 # Launch refuses existing paths, seeds from this committed code root, and leaves
 # the sessions open. Verify checks the child's visible labels, independent placement, and report.
@@ -20,8 +21,10 @@ primary=${FM_ORCA_PROOF_PRIMARY:?explicit disposable primary required}
 mate=${FM_ORCA_PROOF_HOME:?explicit disposable secondmate home required}
 id=${FM_ORCA_PROOF_ID:?explicit test id required}
 project=${FM_ORCA_PROOF_PROJECT:-proof}
+scout=${FM_ORCA_PROOF_SCOUT_ID:-orca-proof-scout}
 case "$id" in ''|*[!A-Za-z0-9_-]*) fail 'invalid proof id' ;; esac
 case "$project" in ''|*[!A-Za-z0-9_-]*) fail 'invalid proof project' ;; esac
+case "$scout" in ''|*[!A-Za-z0-9_-]*) fail 'invalid proof scout id' ;; esac
 case "$primary:$mate" in /*:/*) ;; *) fail 'proof homes must be absolute' ;; esac
 [ "$primary" != "$mate" ] || fail 'proof homes must differ'
 unset FM_ROOT_OVERRIDE FM_STATE_OVERRIDE FM_DATA_OVERRIDE FM_CONFIG_OVERRIDE FM_PROJECTS_OVERRIDE
@@ -51,8 +54,8 @@ case "${FM_ORCA_PROOF_PHASE:-launch}" in
     [ "$(git -C "$mate" rev-parse HEAD)" = "$(git -C "$ROOT" rev-parse HEAD)" ] || fail 'seeded code differs from test code'
     # The unpushed test branch is intentional; never sync it to another branch.
     FM_SKIP_SECONDMATE_SYNC=1 bash "$ROOT/bin/fm-spawn.sh" "$id" --secondmate --backend orca --harness pi
-    bash "$ROOT/bin/fm-send.sh" "$id" "Commission exactly one read-only scout named orca-proof-scout on the $project project, using Orca and Pi. $task Do not use Railway credentials. Report through the correlated parent channel and retain the scout terminal for the visual check."
-    pass "Orca/Pi secondmate launched; live report and visual inspection still pending: 2ndmate-$id, fm-orca-proof-scout"
+    bash "$ROOT/bin/fm-send.sh" "$id" "Commission exactly one read-only scout named $scout on the $project project, using Orca and Pi. $task Do not use Railway credentials. Report through the correlated parent channel and retain the scout terminal for the visual check."
+    pass "Orca/Pi secondmate launched; live report and visual inspection still pending: 2ndmate-$id, 2ndmate-$id · fm-$scout"
     ;;
   verify|retire)
     [ "$(cat "$primary/.orca-secondmate-proof")" = "$id" ] || fail 'not the recorded disposable proof primary'
@@ -60,12 +63,12 @@ case "${FM_ORCA_PROOF_PHASE:-launch}" in
     . "$ROOT/bin/fm-backend.sh"
     fm_backend_validate_task_endpoint "$primary/state/$id.meta" "$id" || fail 'invalid secondmate endpoint'
     if [ "$FM_ORCA_PROOF_PHASE" = verify ]; then
-      child="$mate/state/orca-proof-scout.meta"
-      fm_backend_validate_task_endpoint "$child" orca-proof-scout || fail 'invalid proof scout endpoint'
-      [ -s "$mate/data/orca-proof-scout/report.md" ] || fail 'proof scout report missing'
+      child="$mate/state/$scout.meta"
+      fm_backend_validate_task_endpoint "$child" "$scout" || fail 'invalid proof scout endpoint'
+      [ -s "$mate/data/$scout/report.md" ] || fail 'proof scout report missing'
       child_workspace=$(fm_backend_meta_exact_value "$child" orca_worktree_id)
       child_terminal=$(fm_backend_meta_exact_value "$child" terminal)
-      label="2ndmate-$id · fm-orca-proof-scout"
+      label="2ndmate-$id · fm-$scout"
       orca worktree show --worktree "id:$child_workspace" --json | \
         node "$ROOT/bin/backends/orca-home.js" worker-workspace "$child_workspace" "$label" || fail 'real worker label or independent placement is unconfirmed'
       orca terminal show --terminal "$child_terminal" --json | \
