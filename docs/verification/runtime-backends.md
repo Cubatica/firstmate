@@ -2062,7 +2062,7 @@ result.truncated=false
 pi --version: 1.2.0
 ```
 
-The worktree response does not contain `projectHostSetupId`; the adapter resolves the matching path and repository from the separate local setup inventory.
+The seeded root-workspace response does not contain `projectHostSetupId`; the adapter resolves the matching path and repository from the separate local setup inventory.
 These reads establish workspace and terminal inventory shapes, not a Pi process-liveness proof.
 No native supervised Pi start/stop identity has been established, so `fm_backend_agent_state` stays `unverified` and exit/relaunch remains refused.
 `tests/fm-orca-secondmate-live-e2e.test.sh` owns the opted-in launch, worker-label and no-parent verification, visual checkpoint, and guarded-retirement refresh procedure.
@@ -2077,6 +2077,21 @@ An explicit `orca worktree set --worktree id:<worker-workspace> --parent-worktre
 
 The adapter therefore uses independent placement and ownership labels only.
 `tests/fm-backend-orca.test.sh` verifies the worktree and terminal labels and refuses a false or missing no-parent postcondition.
+
+A fresh Pi scout launched through `fm-spawn.sh` on that runtime retained its custom label after the agent started.
+The refresh reads are `orca worktree show --worktree id:<worker-workspace> --json` and `orca terminal show --terminal <worker-terminal> --json`.
+The observed fields were:
+
+```text
+result.worktree.displayName=2ndmate-olilit-orca-test · fm-orca-proof-labels
+result.worktree.parentWorktreeId=null
+result.worktree.lineage=null
+result.terminal.title=2ndmate-olilit-orca-test · fm-orca-proof-labels
+result.terminal.agentIdentity=pi
+```
+
+`terminal rename --title` establishes the custom terminal title; a creation title alone can be replaced by Pi's own automatic title.
+The secondmate's original terminal retained its Pi-generated title, with the secondmate home name.
 
 ### Orca environment source
 
