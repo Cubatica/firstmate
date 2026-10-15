@@ -46,6 +46,10 @@ if [ "${1:-}" = status ] && [ "${FM_ORCA_STATUS_RESPONSE:-ready}" != sequence ];
   printf '{"ok":true,"result":{"runtime":{"reachable":true,"state":"ready"}}}\n'
   exit 0
 fi
+if [ "${1:-}:${2:-}" = project:setups ]; then
+  cat "$RESP/setups.json"
+  exit 0
+fi
 n=$next
 echo "$n" > "$COUNT_FILE"
 [ ! -f "$RESP/$n.out" ] || cat "$RESP/$n.out"
@@ -587,7 +591,8 @@ test_spawn_orca_secondmate_reuses_seeded_home() {
   orca_case secondmate-spawn
   printf '{"ok":false,"error":{"code":"repo_not_found"}}\n' > "$RESP/1.out"
   printf '{"ok":true,"result":{"repo":{"id":"repo-sm"}}}\n' > "$RESP/2.out"
-  printf '{"ok":true,"result":{"worktree":{"id":"repo-sm::%s","path":"%s","repoId":"repo-sm","projectHostSetupId":"repo-sm","isMainWorktree":true}}}\n' "$subhome" "$subhome" > "$RESP/3.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-sm::%s","path":"%s","repoId":"repo-sm","isMainWorktree":true}}}\n' "$subhome" "$subhome" > "$RESP/3.out"
+  home_setup_response "$subhome" repo-sm
   cp "$RESP/3.out" "$RESP/4.out"
   printf '{"ok":true,"result":{"terminals":[{"handle":"term-sm","worktreeId":"repo-sm::%s"}],"totalCount":1,"truncated":false,"hostScope":{"omittedHostIds":[]}}}\n' "$subhome" > "$RESP/6.out"
   printf '{"ok":true,"result":{"terminal":{"handle":"term-sm"}}}\n' > "$RESP/5.out"
@@ -626,7 +631,7 @@ SH
   assert_contains "$out" 'still has in-flight work' 'child-work retirement gate lost'
   [ ! -s "$LOG" ] || fail 'child-work gate ran Orca before refusal'
   rm "$subhome/state/live-child.meta"
-  printf '{"ok":true,"result":{"worktree":{"id":"repo-sm::%s","path":"%s","repoId":"repo-sm","projectHostSetupId":"repo-sm","isMainWorktree":true}}}\n' "$subhome" "$subhome" > "$RESP/1.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-sm::%s","path":"%s","repoId":"repo-sm","isMainWorktree":true}}}\n' "$subhome" "$subhome" > "$RESP/1.out"
   printf '{"ok":true,"result":{"terminals":[],"totalCount":0,"truncated":true,"hostScope":{"omittedHostIds":[]}}}\n' > "$RESP/2.out"
   if out=$( HOME="$SPAWN_HOME" PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
     FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_TEARDOWN_GUARD_DONE=1 \
@@ -1417,8 +1422,22 @@ run_orca_home() {
     bash -c '. "$0/bin/backends/orca.sh"; "$@"' "$ROOT" "$@"
 }
 
+home_setup_response() { # <path> <repo>
+  python3 - "$RESP/setups.json" "$1" "$2" <<'PYSETUP'
+import json, sys
+from pathlib import Path
+file, path, repo = sys.argv[1:]
+p = Path(file)
+d = json.loads(p.read_text()) if p.exists() else {"ok": True, "result": {"setups": []}}
+d['result']['setups'] = [s for s in d['result']['setups'] if s['path'] != path]
+d['result']['setups'].append({"id": repo, "repoId": repo, "hostId": "local", "path": path, "setupState": "ready"})
+p.write_text(json.dumps(d))
+PYSETUP
+}
+
 home_root_response() { # <home> <file>
-  printf '{"ok":true,"result":{"worktree":{"id":"repo-home::%s","path":"%s","repoId":"repo-home","projectHostSetupId":"repo-home","isMainWorktree":true}}}\n' "$1" "$1" > "$2"
+  home_setup_response "$1" repo-home
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-home::%s","path":"%s","repoId":"repo-home","isMainWorktree":true}}}\n' "$1" "$1" > "$2"
 }
 
 home_inventory_response() { # <home> <present|absent> <file>
@@ -1472,6 +1491,32 @@ test_home_registration_uncertainty_and_binding() {
   if run_orca_home fm_backend_orca_home_repo "$TEST_HOME" "$TEST_HOME" >/dev/null 2>&1; then fail 'pending add retried blindly'; fi
   [ "$(cat "$LOG")" = "$out" ] || fail 'pending registration should refuse before another runtime call'
   pass 'Orca homes preserve uncertain registrations and reject root identity drift'
+}
+
+test_home_setup_identity_refuses_mismatch() {
+  local bad out
+  for bad in missing duplicate repo host state changed; do
+    make_registered_home "setup-$bad" owned
+    home_root_response "$TEST_HOME" "$RESP/1.out"
+    python3 - "$RESP/setups.json" "$bad" <<'PYSETUP'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+d = json.loads(p.read_text())
+s = d['result']['setups'][0]
+kind = sys.argv[2]
+if kind == 'missing': d['result']['setups'] = []
+elif kind == 'duplicate': d['result']['setups'].append(dict(s))
+else: s[{'repo': 'repoId', 'host': 'hostId', 'state': 'setupState', 'changed': 'id'}[kind]] = 'different'
+p.write_text(json.dumps(d))
+PYSETUP
+    if out=$(run_orca_home fm_backend_orca_home_workspace "$TEST_HOME" read 2>&1); then
+      fail "accepted mismatched setup: $bad"
+    fi
+    assert_contains "$out" 'Orca' "missing setup refusal: $bad"
+    assert_not_contains "$(cat "$LOG")" $'project\x1fsetup-delete' 'lookup must not delete registrations'
+  done
+  pass 'Orca roots bind the separate project setup inventory and refuse missing, ambiguous, or changed identities'
 }
 
 test_home_close_requires_complete_scoped_inventory() {
@@ -1538,7 +1583,8 @@ test_home_worker_parent_is_explicit() {
   home_root_response "$TEST_HOME" "$RESP/1.out"
   printf '{"ok":false,"error":{"code":"repo_not_found"}}\n' > "$RESP/2.out"
   printf '{"ok":true,"result":{"repo":{"id":"repo-child"}}}\n' > "$RESP/3.out"
-  printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","path":"%s","repoId":"repo-child","projectHostSetupId":"repo-child","isMainWorktree":true}}}\n' "$project" "$project" > "$RESP/4.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-child::%s","path":"%s","repoId":"repo-child","isMainWorktree":true}}}\n' "$project" "$project" > "$RESP/4.out"
+  home_setup_response "$project" repo-child
   printf '{"ok":true,"result":{"worktree":{"id":"repo-child::/worker","path":"/worker"}}}\n' > "$RESP/5.out"
   out=$(run_orca_home fm_backend_orca_worktree_create "$project" child "$TEST_HOME") || fail 'parented worker failed'
   [ "$out" = $'repo-child::/worker\t/worker' ] || fail 'worker result changed'
@@ -1618,6 +1664,7 @@ test_secondmate_force_teardown_refuses_orca_child_id_path_mismatch
 test_secondmate_force_teardown_refuses_partial_orca_child
 
 test_home_registration_uncertainty_and_binding
+test_home_setup_identity_refuses_mismatch
 test_home_close_requires_complete_scoped_inventory
 test_home_retirement_ownership_and_retry
 test_home_worker_parent_is_explicit

@@ -50,7 +50,7 @@ function receipt(home, project) {
 function rootWorkspace(data, project, repo) {
   const w = result(data).worktree;
   if (!w || w.path !== project || w.repoId !== repo || w.id !== repo + '::' + project ||
-      w.isMainWorktree !== true || !atom(w.projectHostSetupId)) refuse('Orca root workspace identity mismatch');
+      w.isMainWorktree !== true) refuse('Orca root workspace identity mismatch');
   return w;
 }
 function terminals(data, workspace) {
@@ -85,18 +85,30 @@ try {
       write(receiptPath(home, project), {home, path: project, state: 'pending'});
       break;
     case 'record': {
-      const [,, repo, ownership] = args;
+      const [,, repo, ownership, setup] = args;
+      if (!atom(setup)) refuse('invalid Orca setup identity');
       const w = rootWorkspace(input(), project, repo);
       write(receiptPath(home, project), {home, path: project, state: 'ready', repo,
-        setup: w.projectHostSetupId, worktree: w.id, owned: ownership === 'owned'});
+        setup, worktree: w.id, owned: ownership === 'owned'});
       value = repo;
+      break;
+    }
+    case 'setup': {
+      const [project, repo] = args;
+      const r = result(input());
+      if (!Array.isArray(r.setups)) refuse('missing Orca setup inventory');
+      const matches = r.setups.filter(s => s.path === project);
+      if (matches.length !== 1 || !atom(matches[0].id) || matches[0].repoId !== repo ||
+          matches[0].hostId !== 'local' || matches[0].setupState !== 'ready')
+        refuse('Orca project setup identity mismatch');
+      value = matches[0].id;
       break;
     }
     case 'workspace': {
       const r = receipt(home, project);
       if (!r || !['ready', 'releasing'].includes(r.state)) refuse('missing persistent Orca workspace receipt');
       const w = rootWorkspace(input(), project, r.repo);
-      if (w.projectHostSetupId !== r.setup) refuse('Orca setup identity changed');
+      if (args[2] !== r.setup) refuse('Orca setup identity changed');
       value = w.id;
       break;
     }

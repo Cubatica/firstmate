@@ -44,7 +44,7 @@ case "${FM_ORCA_PROOF_PHASE:-launch}" in
     # HTTPS clones through the authenticated gh helper, without storing tokens.
     export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0='!gh auth git-credential'
     git clone --quiet "$repo" "$primary/projects/$project"
-    export FM_SECONDMATE_CHARTER='Disposable Orca proof only. Idle until routed one read-only scout request; no project changes, publication, infrastructure credentials, production handoff, or unrelated work. Use Orca and Pi only. Keep the scout terminal open after reporting, until the parent asks for guarded cleanup.'
+    export FM_SECONDMATE_CHARTER='Disposable Orca proof only. Idle until routed one read-only scout request; no project changes, publication, infrastructure credentials, production handoff, or unrelated work. Use Orca and Pi only. This home intentionally runs the committed source under test; do not switch branches or update it. Keep the scout terminal open after reporting, until the parent asks for guarded cleanup.'
     export FM_SECONDMATE_SCOPE='Disposable read-only Orca lifecycle proof only'
     bash "$ROOT/bin/fm-brief.sh" "$id" --secondmate "$project"
     bash "$ROOT/bin/fm-home-seed.sh" "$id" "$mate" "$project"

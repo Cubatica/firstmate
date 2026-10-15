@@ -13,11 +13,17 @@
 . "$(dirname -- "${BASH_SOURCE[0]}")/../fm-composer-lib.sh"
 FM_ORCA_HOME_JSON="$(dirname -- "${BASH_SOURCE[0]}")/orca-home.js"
 
+fm_backend_orca_home_setup() { # <project-path> <repo-id>
+  local out
+  out=$(orca project setups --host local --json) || return 1
+  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" setup "$1" "$2"
+}
+
 # Persistent homes are registered roots, never disposable Orca worktrees.
 # Each registration has an ownership receipt in state/orca-registrations.
 # Unknown add results retain a pending receipt and refuse automatic adoption.
 fm_backend_orca_home_repo() { # <seeded-home> <home-or-project-path>
-  local home=$1 project=$2 out repo previous owned=reused
+  local home=$1 project=$2 out repo previous setup owned=reused
   previous=$(node "$FM_ORCA_HOME_JSON" receipt "$home" "$project") || return 1
   out=$(orca repo show --repo "path:$project" --json) || true
   if repo=$(printf '%s' "$out" | fm_backend_orca_json_get repo-id 2>/dev/null); then
@@ -34,17 +40,21 @@ fm_backend_orca_home_repo() { # <seeded-home> <home-or-project-path>
     repo=$(printf '%s' "$out" | fm_backend_orca_json_get repo-id) || return 1
     owned=owned
   fi
+  setup=$(fm_backend_orca_home_setup "$project" "$repo") || return 1
   out=$(orca worktree show --worktree "path:$project" --json) || return 1
-  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" record "$home" "$project" "$repo" "$owned"
+  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" record "$home" "$project" "$repo" "$owned" "$setup"
 }
 
-fm_backend_orca_home_workspace() { # <seeded-home> [read|ensure]
-  local home=$1 mode=${2:-ensure} out
+fm_backend_orca_home_workspace() { # <seeded-home> [read|ensure] [project-path]
+  local home=$1 mode=${2:-ensure} project=${3:-$1} out repo setup
   if [ "$mode" = ensure ]; then
-    fm_backend_orca_home_repo "$home" "$home" >/dev/null || return 1
+    fm_backend_orca_home_repo "$home" "$project" >/dev/null || return 1
   fi
-  out=$(orca worktree show --worktree "path:$home" --json) || return 1
-  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" workspace "$home" "$home"
+  repo=$(node "$FM_ORCA_HOME_JSON" receipt "$home" "$project") || return 1
+  [ -n "$repo" ] || { echo "error: missing persistent Orca workspace receipt" >&2; return 1; }
+  setup=$(fm_backend_orca_home_setup "$project" "$repo") || return 1
+  out=$(orca worktree show --worktree "path:$project" --json) || return 1
+  printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" workspace "$home" "$project" "$setup"
 }
 
 # A stale handle alone proves nothing. Scope a complete inventory to the
@@ -87,8 +97,9 @@ fm_backend_orca_home_retire() { # <seeded-home>
       node "$FM_ORCA_HOME_JSON" released "$home" "$project" || return 1
       continue
     fi
+    setup=$(fm_backend_orca_home_setup "$project" "$repo") || return 1
     out=$(orca worktree show --worktree "path:$project" --json) || return 1
-    printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" workspace "$home" "$project" >/dev/null || return 1
+    printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" workspace "$home" "$project" "$setup" >/dev/null || return 1
     out=$(orca worktree list --repo "id:$repo" --limit 10000 --json) || return 1
     printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" root-only "$workspace" || return 1
     out=$(orca terminal list --worktree "id:$workspace" --limit 10000 --json) || return 1

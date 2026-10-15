@@ -2035,6 +2035,7 @@ Read-only inspection on 2026-10-16 (Sydney) used Orca runtime 1.4.224 and Pi 1.2
 ```sh
 orca status --json
 orca worktree show --worktree path:<isolated-test-worktree> --json
+orca project setups --host local --json
 orca terminal list --worktree path:<isolated-test-worktree> --limit 10000 --json
 orca orchestration worker-start --help
 pi --version
@@ -2048,7 +2049,11 @@ result.runtime.reachable=true
 result.runtime.state=ready
 result.worktree.id=<repo-id>::<absolute-path>
 result.worktree.repoId=<repo-id>
-result.worktree.projectHostSetupId=<setup-id>
+result.setups[].id=<setup-id>
+result.setups[].repoId=<repo-id>
+result.setups[].path=<absolute-path>
+result.setups[].hostId=local
+result.setups[].setupState=ready
 result.terminals[].handle=<terminal-handle>
 result.terminals[].worktreeId=<repo-id>::<absolute-path>
 result.hostScope.omittedHostIds=[]
@@ -2057,6 +2062,7 @@ result.truncated=false
 pi --version: 1.2.0
 ```
 
+The worktree response does not contain `projectHostSetupId`; the adapter resolves the matching path and repository from the separate local setup inventory.
 These reads establish workspace and terminal inventory shapes, not a Pi process-liveness proof.
 No native supervised Pi start/stop identity has been established, so `fm_backend_agent_state` stays `unverified` and exit/relaunch remains refused.
 `tests/fm-orca-secondmate-live-e2e.test.sh` owns the opted-in launch, child-placement verification, visual checkpoint, and guarded-retirement refresh procedure.
