@@ -53,6 +53,7 @@ fi
 n=$next
 echo "$n" > "$COUNT_FILE"
 [ ! -f "$RESP/$n.out" ] || cat "$RESP/$n.out"
+[ ! -f "$RESP/$n.hook" ] || bash "$RESP/$n.hook"
 if [ -f "$RESP/$n.exit" ]; then
   exit "$(cat "$RESP/$n.exit")"
 fi
@@ -650,6 +651,15 @@ SH
   cp "$RESP/4.out" "$RESP/8.out"
   cp "$RESP/3.out" "$RESP/9.out"
   printf '{"ok":false,"error":{"code":"repo_not_found"}}\n' > "$RESP/10.out"
+  printf 'mkdir -p %q\n' "$home/state/pending-replies" > "$RESP/4.hook"
+  if out=$( HOME="$SPAWN_HOME" PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_TEARDOWN_GUARD_DONE=1 \
+    "$ROOT/bin/fm-teardown.sh" "$id" 2>&1 ); then fail 'retired home after late pending-reply change'; fi
+  assert_contains "$out" 'pending-reply recovery paths changed' 'late pending-reply recheck refusal missing'
+  assert_not_contains "$(cat "$LOG")" $'setup-delete' 'late recheck failure released owned Orca registrations'
+  assert_present "$home/state/$id.meta" 'late recheck failure removed metadata'
+  assert_present "$subhome/.fm-secondmate-home" 'late recheck failure removed home'
+  rm -f "$RESP/4.hook"
   out=$( HOME="$SPAWN_HOME" PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
     FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_TEARDOWN_GUARD_DONE=1 \
     "$ROOT/bin/fm-teardown.sh" "$id" 2>&1 )
@@ -658,6 +668,7 @@ SH
   assert_absent "$home/state/$id.meta" 'retirement retained metadata'
   assert_contains "$(cat "$LOG")" $'terminal\x1fclose' 'retirement skipped terminal close'
   assert_not_contains "$(cat "$LOG")" $'worktree\x1frm' 'retirement treated home as disposable worker'
+  assert_contains "$(cat "$LOG")" $'setup-delete' 'retry after late refusal did not release owned Orca registrations'
   rm -rf "/tmp/fm-$id" "$(dirname "$staged")"
   pass "Orca secondmate launches once, preserves child/close guards, and retires its persistent home safely"
 }

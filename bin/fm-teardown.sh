@@ -3814,13 +3814,15 @@ if [ "$KIND" != secondmate ]; then
 fi
 if [ "$KIND" = secondmate ]; then
   [ -n "$HOME_PATH" ] || HOME_PATH=$WT
-  if [ "$BACKEND" = orca ]; then
-    fm_backend_orca_home_retire "$HOME_PATH" || exit 1
-  fi
   handoff_wake_retire_stage \
     || { echo "error: receiver wake cleanup could not be staged; preserving the secondmate home and route" >&2; exit 1; }
   pending_replies_recovery_validate recheck \
     || { echo "error: local pending-reply recovery paths changed; preserving the secondmate home and route" >&2; exit 1; }
+  if [ "$BACKEND" = orca ] && ! fm_backend_orca_home_retire "$HOME_PATH"; then
+    handoff_wake_retire_stage_restore \
+      || echo "error: receiver wake restoration failed; recovery state remains at $HANDOFF_WAKE_RETIRE_STAGE" >&2
+    exit 1
+  fi
   if remove_firstmate_home "$HOME_PATH" "secondmate home" "$ID"; then
     :
   else
