@@ -19,10 +19,34 @@ fm_backend_orca_home_setup() { # <project-path> <repo-id>
   printf '%s' "$out" | node "$FM_ORCA_HOME_JSON" setup "$1" "$2"
 }
 
+# One per-home lock serializes every registration receipt read-modify-write.
+fm_backend_orca_home_locked() { # <seeded-home> <command> [args...]
+  local home=$1 lock rc=0
+  shift
+  [ -d "$home/state" ] && [ ! -L "$home/state" ] || {
+    echo "error: unsafe secondmate state directory; preserving Orca registrations" >&2
+    return 1
+  }
+  if ! declare -F fm_lock_acquire_wait >/dev/null 2>&1; then
+    local STATE="$home/state"
+    # shellcheck source=bin/fm-wake-lib.sh
+    . "$(dirname -- "${BASH_SOURCE[0]}")/../fm-wake-lib.sh" || return 1
+  fi
+  lock="$home/state/orca-registrations.lock"
+  fm_lock_acquire_wait "$lock" || return 1
+  "$@" || rc=$?
+  fm_lock_release "$lock" || true
+  return "$rc"
+}
+
 # Persistent homes are registered roots, never disposable Orca worktrees.
 # Each registration has an ownership receipt in state/orca-registrations.
 # Unknown add results retain a pending receipt and refuse automatic adoption.
 fm_backend_orca_home_repo() { # <seeded-home> <home-or-project-path>
+  fm_backend_orca_home_locked "$1" fm_backend_orca_home_register "$1" "$2"
+}
+
+fm_backend_orca_home_register() { # <seeded-home> <home-or-project-path>
   local home=$1 project=$2 out repo previous setup owned=reused
   previous=$(node "$FM_ORCA_HOME_JSON" receipt "$home" "$project") || return 1
   out=$(orca repo show --repo "path:$project" --json) || true
@@ -84,6 +108,10 @@ fm_backend_orca_close_confirmed() { # <worktree-id> <terminal>
 # any. The root-only and empty checks also protect unrecorded/foreign work.
 # Each successful deletion is confirmed and journaled for an idempotent retry.
 fm_backend_orca_home_retire() { # <seeded-home>
+  fm_backend_orca_home_locked "$1" fm_backend_orca_home_release "$1"
+}
+
+fm_backend_orca_home_release() { # <seeded-home>
   local home=$1 rows project repo setup workspace ownership lifecycle out
   rows=$(node "$FM_ORCA_HOME_JSON" registrations "$home") || return 1
   while IFS=$'\t' read -r project repo setup workspace ownership lifecycle; do

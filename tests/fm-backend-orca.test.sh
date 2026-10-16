@@ -1504,6 +1504,58 @@ test_home_registration_uncertainty_and_binding() {
   pass 'Orca homes preserve uncertain registrations and reject root identity drift'
 }
 
+test_concurrent_first_registrations_keep_ownership() {
+  local dir fb home rc_b rc_a
+  dir="$TMP_ROOT/home-registration-race"
+  fb="$dir/fakebin"
+  mkdir -p "$fb" "$dir/home/state"
+  home=$(cd "$dir/home" && pwd -P)
+  printf 'race\n' > "$home/.fm-secondmate-home"
+  printf '{"ok":true,"result":{"setups":[{"id":"repo-race","repoId":"repo-race","hostId":"local","path":"%s","setupState":"ready"}]}}\n' "$home" > "$dir/setups.json"
+  cat > "$fb/orca" <<'SH'
+#!/usr/bin/env bash
+set -u
+S=$FM_RACE_DIR
+case "$1:$2" in
+  repo:show)
+    if [ "${FM_RACE_ROLE:-}" = B ] && [ ! -e "$S/a.started" ]; then
+      : > "$S/a.started"
+      FM_RACE_ROLE=A PATH="$PATH" bash -c '. "$0/bin/backends/orca.sh"; fm_backend_orca_home_repo "$1" "$1"; echo $? > "$2/a.rc"' \
+        "$FM_RACE_ROOT" "$FM_RACE_HOME" "$S" >"$S/a.log" 2>&1 &
+      for _ in $(seq 1 30); do [ -e "$S/a.rc" ] && break; sleep 0.1; done
+    fi
+    if [ -e "$S/registered" ]; then
+      printf '{"ok":true,"result":{"repo":{"id":"repo-race"}}}\n'
+    else
+      printf '{"ok":false,"error":{"code":"repo_not_found"}}\n'
+    fi
+    ;;
+  repo:add) : > "$S/registered"; printf '{"ok":true,"result":{"repo":{"id":"repo-race"}}}\n' ;;
+  project:setups) cat "$S/setups.json" ;;
+  worktree:show)
+    printf '{"ok":true,"result":{"worktree":{"id":"repo-race::%s","path":"%s","repoId":"repo-race","isMainWorktree":true}}}\n' "$FM_RACE_HOME" "$FM_RACE_HOME" ;;
+  *) exit 1 ;;
+esac
+SH
+  chmod +x "$fb/orca"
+  PATH="$fb:$PATH" FM_RACE_DIR="$dir" FM_RACE_ROOT="$ROOT" FM_RACE_HOME="$home" FM_RACE_ROLE=B \
+    bash -c '. "$0/bin/backends/orca.sh"; fm_backend_orca_home_repo "$1" "$1"' "$ROOT" "$home" >/dev/null 2>"$dir/b.log"
+  rc_b=$?
+  for _ in $(seq 1 100); do [ -e "$dir/a.rc" ] && break; sleep 0.1; done
+  rc_a=$(cat "$dir/a.rc" 2>/dev/null || echo missing)
+  expect_code 0 "$rc_b" "second concurrent registration failed: $(cat "$dir/b.log")"
+  [ "$rc_a" = 0 ] || fail "first concurrent registration failed ($rc_a): $(cat "$dir/a.log")"
+  node -e '
+const fs = require("fs"), path = require("path");
+const dir = path.join(process.argv[1], "state", "orca-registrations");
+const files = fs.readdirSync(dir);
+if (files.length !== 1) process.exit(1);
+const r = JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf8"));
+process.exit(r.state === "ready" && r.owned === true ? 0 : 1);
+' "$home" || fail 'concurrent first registration overwrote owned receipt as reused'
+  pass 'Orca home registration serializes concurrent first workers and keeps the created registration owned'
+}
+
 test_home_setup_identity_refuses_mismatch() {
   local bad out
   for bad in missing duplicate repo host state changed; do
@@ -1739,6 +1791,7 @@ test_secondmate_force_teardown_refuses_orca_child_id_path_mismatch
 test_secondmate_force_teardown_refuses_partial_orca_child
 
 test_home_registration_uncertainty_and_binding
+test_concurrent_first_registrations_keep_ownership
 test_home_setup_identity_refuses_mismatch
 test_home_close_requires_complete_scoped_inventory
 test_home_retirement_ownership_and_retry
