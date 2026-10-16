@@ -1,0 +1,24 @@
+# Live lab: real Orca 1.4.224; marked canonical lab FM_HOME; seeded secondmate home 'labmate' (registry route above)
+Orca structural inventory (repo paths + worktree ids) before: 93393c55b6c0eaf6; lab-path mentions: 0
+
+## S1 product runtime gate vs real Orca: fm_backend_orca_runtime_check
+exit=0
+
+## S2 BASE 5f2b81b: fm-spawn labmate --secondmate --backend orca --harness pi, with launch receipt planted
+error: backend=orca does not support --secondmate spawns yet
+exit=1
+
+## S3 HEAD: same spawn with retained partial-launch receipt in seeded home
+error: unfinished Orca secondmate launch; reconcile /private/var/folders/mq/wz0rqb2x45x3lpk876pv0n1c0000gn/T/fm-lab-mate.B0i3G3/home/state/orca-secondmate-launch before retrying
+exit=1
+receipt still present: attempt=lab-probe-planted-receipt
+parent state/labmate.meta: none
+
+## S4 HEAD: spawn with pre-existing parent metadata state/labmate.meta (no receipt)
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: existing Orca secondmate metadata for labmate; recovery is unverified, refusing duplicate launch
+exit=1
+parent meta unchanged: window=lab-planted
+
+Orca structural inventory after: 93393c55b6c0eaf6 (unchanged: yes); lab-path mentions: 0
