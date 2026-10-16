@@ -1486,8 +1486,9 @@ spawn_abort_cleanup() {
     ORCA_ABORT_CLEANUP=0
     if [ "$KIND" = secondmate ]; then
       # Never remove a persistent home as an ordinary worker worktree. Keep
-      # the attempt receipt when creation/close is uncertain, even if no
-      # terminal handle was returned. That receipt refuses a duplicate spawn.
+      # the attempt receipt when creation, home binding, or close is
+      # uncertain: ORCA_TERMINAL is set only once the returned handle is proven
+      # present in the home workspace. That receipt refuses a duplicate spawn.
       if [ -n "${ORCA_TERMINAL:-}" ] &&
         fm_backend_orca_close_confirmed "$ORCA_WORKTREE_ID" "$ORCA_TERMINAL"; then
         SPAWN_ENDPOINT_CLOSED=1
@@ -4279,13 +4280,13 @@ EOF
       ORCA_HOME_ATTEMPT="$WT/state/orca-secondmate-launch"
       ( set -o noclobber; printf 'worktree=%s\nterminal=pending\n' "$ORCA_WORKTREE_ID" >"$ORCA_HOME_ATTEMPT" ) || exit 1
       ORCA_ABORT_CLEANUP=1
-      ORCA_TERMINAL=$(fm_backend_orca_terminal_create "$ORCA_WORKTREE_ID" "2ndmate-$ID" "$ORCA_HOME_ATTEMPT") || exit 1
-      printf 'worktree=%s\nterminal=%s\n' "$ORCA_WORKTREE_ID" "$ORCA_TERMINAL" >"$ORCA_HOME_ATTEMPT" || exit 1
-      [ "$(fm_backend_orca_terminal_state "$ORCA_WORKTREE_ID" "$ORCA_TERMINAL")" = present ] || {
-        echo "error: new Orca secondmate terminal is not bound to its home workspace" >&2
+      T=$(fm_backend_orca_terminal_create "$ORCA_WORKTREE_ID" "2ndmate-$ID" "$ORCA_HOME_ATTEMPT") || exit 1
+      printf 'worktree=%s\nterminal=%s\n' "$ORCA_WORKTREE_ID" "$T" >"$ORCA_HOME_ATTEMPT" || exit 1
+      [ "$(fm_backend_orca_terminal_state "$ORCA_WORKTREE_ID" "$T")" = present ] || {
+        echo "error: new Orca secondmate terminal $T is not bound to its home workspace; reconcile $ORCA_HOME_ATTEMPT before retrying" >&2
         exit 1
       }
-      T=$ORCA_TERMINAL
+      ORCA_TERMINAL=$T
     else
       ORCA_SECONDMATE_HOME=
       ORCA_WORKER_LABEL=$W

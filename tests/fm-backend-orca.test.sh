@@ -673,6 +673,51 @@ SH
   pass "Orca secondmate launches once, preserves child/close guards, and retires its persistent home safely"
 }
 
+test_spawn_orca_secondmate_unbound_terminal_retains_receipt() {
+  local home subhome id out rc
+  id=orcasmub
+  home="$TMP_ROOT/secondmate-unbound-primary"
+  subhome="$TMP_ROOT/secondmate-unbound-home"
+  fm_git_init_commit "$subhome"
+  mkdir -p "$home/data/$id" "$home/state" "$home/config" "$home/projects" \
+    "$subhome/bin" "$subhome/data" "$subhome/state" "$subhome/projects"
+  printf '%s\n' "$id" > "$subhome/.fm-secondmate-home"
+  printf 'firstmate\n' > "$subhome/AGENTS.md"
+  printf 'Idle test charter.\n' > "$subhome/data/charter.md"
+  printf 'manual\n' > "$home/config/backlog-backend"
+  touch "$home/state/.last-watcher-beat"
+  orca_case secondmate-unbound-spawn
+  printf '{"ok":false,"error":{"code":"repo_not_found"}}\n' > "$RESP/1.out"
+  printf '{"ok":true,"result":{"repo":{"id":"repo-smub"}}}\n' > "$RESP/2.out"
+  printf '{"ok":true,"result":{"worktree":{"id":"repo-smub::%s","path":"%s","repoId":"repo-smub","isMainWorktree":true}}}\n' "$subhome" "$subhome" > "$RESP/3.out"
+  home_setup_response "$subhome" repo-smub
+  cp "$RESP/3.out" "$RESP/4.out"
+  printf '{"ok":true,"result":{"terminal":{"handle":"term-elsewhere"}}}\n' > "$RESP/5.out"
+  printf '{"ok":true,"result":{"terminals":[],"totalCount":0,"truncated":false,"hostScope":{"omittedHostIds":[]}}}\n' > "$RESP/6.out"
+  cp "$RESP/6.out" "$RESP/7.out"
+  cp "$RESP/6.out" "$RESP/8.out"
+  if out=$( HOME="$SPAWN_HOME" CLAUDE_CONFIG_DIR='' PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" FM_CONFIG_OVERRIDE="$home/config" \
+    FM_PROJECTS_OVERRIDE="$home/projects" FM_SPAWN_NO_GUARD=1 FM_SKIP_SECONDMATE_SYNC=1 FM_SKIP_SECONDMATE_INHERIT=1 \
+    "$ROOT/bin/fm-spawn.sh" "$id" "$subhome" claude --backend orca --secondmate 2>&1 ); then rc=0; else rc=$?; fi
+  [ "$rc" -ne 0 ] || fail "secondmate spawn accepted a terminal absent from its home workspace"
+  assert_contains "$out" 'not bound to its home workspace' 'unbound terminal refusal missing'
+  assert_grep 'terminal=term-elsewhere' "$subhome/state/orca-secondmate-launch" 'unbound terminal dropped its launch receipt'
+  assert_not_contains "$(cat "$LOG")" $'terminal\x1fclose' 'unbound terminal was treated as a closable home endpoint'
+  assert_absent "$home/state/$id.meta" 'unbound terminal published metadata'
+  assert_present "$subhome/.fm-secondmate-home" 'unbound terminal removed home'
+  : > "$LOG"
+  if out=$( HOME="$SPAWN_HOME" CLAUDE_CONFIG_DIR='' PATH="$FB:$PATH" FM_ORCA_LOG="$LOG" FM_ORCA_RESPONSES="$RESP" \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" FM_CONFIG_OVERRIDE="$home/config" \
+    FM_PROJECTS_OVERRIDE="$home/projects" FM_SPAWN_NO_GUARD=1 FM_SKIP_SECONDMATE_SYNC=1 FM_SKIP_SECONDMATE_INHERIT=1 \
+    "$ROOT/bin/fm-spawn.sh" "$id" "$subhome" claude --backend orca --secondmate 2>&1 ); then
+    fail "duplicate Orca secondmate spawn succeeded after unbound terminal"
+  fi
+  assert_contains "$out" 'unfinished Orca secondmate launch' 'retained receipt did not refuse duplicate launch'
+  assert_not_contains "$(cat "$LOG")" $'terminal\x1fcreate' 'duplicate launch created another terminal'
+  pass "Orca secondmate spawn retains its receipt when the returned terminal is not bound to its home"
+}
+
 test_spawn_refuses_orca_when_runtime_not_ready() {
   local proj data state config id out status
   id="orcaruntimez6"
@@ -1767,6 +1812,7 @@ test_worktree_create_removes_worktree_when_path_missing
 test_spawn_preserves_orca_metadata_when_pathless_worktree_cleanup_fails
 test_spawn_writes_orca_metadata_and_launches_harness
 test_spawn_orca_secondmate_reuses_seeded_home
+test_spawn_orca_secondmate_unbound_terminal_retains_receipt
 test_spawn_refuses_orca_when_runtime_not_ready
 test_spawn_refuses_orca_nonisolated_worktree
 test_spawn_removes_orca_worktree_when_terminal_create_fails
