@@ -367,6 +367,7 @@ The refusal is reached only through a close that could not do its job, and each 
 | cmux | 0, silent | 0, not yet distinguishable |
 | herdr | 0, silent | 0 from this arm; `bin/fm-teardown.sh` gates every Herdr record removal on `fm_backend_herdr_endpoint_confirmed_gone` instead |
 
+The Orca row covers ordinary `fm_backend_orca_kill`; [local secondmate retirement](#local-secondmate-identity-surface) uses a separately verified close-and-confirm path.
 The three arms that still report 0 need a presence re-read taken after their own close, and the close-then-read timing that re-read depends on cannot be established without the real Zellij, Orca, and cmux binaries.
 Guessing it is what a refusal must never rest on: a gate that refused an already-exited session would break ordinary cleanup on every task, which is a worse failure than the stranded endpoint it would be trying to prevent.
 tmux's re-read is deliberately exact - `=session` plus a whole-line window-name match - because a prefix match would read a neighboring window as this window's survivor, which is the same exactness the cleanup identity boundary above already requires.
@@ -2092,6 +2093,24 @@ result.terminal.agentIdentity=pi
 
 `terminal rename --title` establishes the custom terminal title; a creation title alone can be replaced by Pi's own automatic title.
 The secondmate's original terminal retained its Pi-generated title, with the secondmate home name.
+
+Guarded secondmate retirement was verified on 2026-10-16 against Orca 1.4.224 and Pi 1.2.0 through the same opted-in live test's `retire` phase.
+The secondmate first completed its scout decision inventory, removed that scout through guarded teardown, and returned a correlated cleanup report; the parent resolved the reply before retirement.
+The live phase returned:
+
+```text
+ok - guarded Orca secondmate retirement completed
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=16532
+```
+
+Exact post-retirement reads confirmed the secondmate and proof scout terminals absent from complete worktree-scoped live inventories, the scout worktrees absent, and both owned home/project repository setups removed.
+The home, parent route, task metadata, and pending replies were removed, while the assigned code workspace retained its identity.
+The terminal inventory evidence had `terminals=[]`, `totalCount=0`, `truncated=false`, and `hostScope.omittedHostIds=[]`.
+One supplementary inventory read omitted the local host; it was not accepted as absence, and a sequential re-read returned a complete empty inventory.
+
+`orca terminal show` continued to return historical records after operator close, with `connected=false`, `writable=false`, and `exitCause.kind=operator_close`.
+Its continued success is therefore not evidence of a live terminal.
+The confirmed-close path uses the complete scoped live inventory before registration removal; it does not require historical terminal records to disappear or infer Pi process liveness from them.
 
 ### Orca environment source
 
