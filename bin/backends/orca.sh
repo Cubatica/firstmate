@@ -90,11 +90,11 @@ fm_backend_orca_terminal_state() { # <worktree-id> <terminal>
 }
 
 fm_backend_orca_close_confirmed() { # <worktree-id> <terminal>
-  local state attempt
+  local state _
   state=$(fm_backend_orca_terminal_state "$1" "$2") || return 1
   [ "$state" != absent ] || return 0
   orca terminal close --terminal "$2" --json >/dev/null 2>&1 || true
-  for attempt in 1 2 3 4 5; do
+  for _ in 1 2 3 4 5; do
     state=$(fm_backend_orca_terminal_state "$1" "$2") || return 1
     [ "$state" != absent ] || return 0
     sleep 0.2

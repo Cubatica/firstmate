@@ -14,6 +14,7 @@
 # Retire requires FM_ORCA_PROOF_VISUAL_CONFIRMED=1 after human inspection and the
 # secondmate's guarded child cleanup. No trap deletes unverified live resources.
 set -eu
+# shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 fm_live_gate opt-in FM_ORCA_SECONDMATE_LIVE orca pi gh
 
